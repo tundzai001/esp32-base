@@ -44,6 +44,8 @@ struct GnssTelemetrySnapshot {
 };
 
 String receiveRtcmFromGnss();
+// Caller owns gnssSerialMutex and rtcmBufferMutex; preserve bytes read by queries.
+void bufferGnssQueryByte(uint8_t value);
 RtcmMessageCounts consumeRtcmMessageCounts();
 GnssTelemetrySnapshot getGnssTelemetrySnapshot();
 uint32_t getRtcmInputBps();

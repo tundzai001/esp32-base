@@ -3,6 +3,7 @@
 #include "Prog_Config.h"
 #include "functions/Backend_Agent.h"
 #include "functions/cmd_handler.h"
+#include "functions/MqttWrite.h"
 #include <Preferences.h>
 #include <cstring>
 #include "helper.h"
@@ -17,7 +18,29 @@ namespace {
 
 extern TinyGsm modem;
 namespace {
-  TinyGsmClient gsmMqttClient(modem, 1);
+  class MqttGsmClient : public TinyGsmClient {
+   public:
+    using TinyGsmClient::TinyGsmClient;
+    using TinyGsmClient::write;
+
+    size_t write(const uint8_t* data, size_t size) override {
+      const size_t sent = writeMqttChunks(data, size, [this](const uint8_t* part, size_t count) {
+        return TinyGsmClient::write(part, count);
+      });
+      if (sent != size) {
+        Serial.printf("[MQTT][ERROR] Modem short write: %u/%u bytes; reconnect required\n",
+                      static_cast<unsigned>(sent), static_cast<unsigned>(size));
+        // The broker may have received a packet prefix. Discard this TCP stream
+        // so the next CONNECT starts a fresh MQTT frame boundary.
+        TinyGsmClient::stop();
+      }
+      return sent;
+    }
+  };
+
+  MqttGsmClient gsmMqttClient(modem, 1);
+  MqttGsmClient gsmProbeClient(modem, 4);
+  WiFiClient wifiProbeClient;
 }
 PubSubClient mqtt(wifiMqttClient);
 
@@ -71,9 +94,38 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+bool probeMqttTransport(bool useGsm) {
+  prefs.begin("myPrefs", true);
+  String host = prefs.getString("MQTT_SERVER", String(MQTT_SERVER));
+  if (host.equalsIgnoreCase("aitogy.asia")) host = MQTT_SERVER;
+  const uint16_t port = prefs.getUShort("MQTT_PORT", MQTT_PORT);
+  const String user = prefs.getString("MQTT_USER", String(MQTT_USER));
+  const String password = prefs.getString("MQTT_PASS", String(MQTT_PASS));
+  prefs.end();
+
+  Client& transport = useGsm ? static_cast<Client&>(gsmProbeClient)
+                             : static_cast<Client&>(wifiProbeClient);
+  PubSubClient probe(transport);
+  probe.setServer(host.c_str(), port);
+  probe.setSocketTimeout(3);
+  if (!probe.setBufferSize(1024)) return false;
+  // TinyGSM connect timeout is seconds; WiFiClient uses milliseconds.
+  const bool tcpReady = useGsm ? gsmProbeClient.connect(host.c_str(), port, 5)
+                               : wifiProbeClient.connect(host.c_str(), port, 3000);
+  // No LWT, publish or subscribe: this probe cannot change station status.
+  const String clientId = "net-probe-" + backendAgent.serial();
+  const bool reachable = tcpReady && probe.connect(clientId.c_str(), user.c_str(), password.c_str());
+  if (reachable) probe.disconnect();
+  transport.stop();
+  return reachable;
+}
+
 int setupMQTT() {
   mqtt.setClient(activeMqttClient());
-  mqtt.setBufferSize(16384);
+  if (!mqtt.setBufferSize(16384)) {
+    Serial.println("[MQTT][ERROR] Cannot allocate 16384-byte MQTT buffer");
+    return -1;
+  }
   prefs.begin("myPrefs", false);
   mqttServerHost() = prefs.getString("MQTT_SERVER", String(MQTT_SERVER));
   if (mqttServerHost().equalsIgnoreCase("aitogy.asia")) {

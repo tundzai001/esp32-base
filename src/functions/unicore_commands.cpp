@@ -10,7 +10,15 @@ using namespace GnssCmdBuilder;
 
     inline bool isValidUnicorePort(const String &port)
     {
-        return port == "COM1" || port == "COM2" || port == "COM3";
+        return port == "COM1" || port == "COM2" || port == "COM3" || port == "CURRENT";
+    }
+
+    inline String outputPortArgument(const String &port) {
+        return port.isEmpty() || port == "CURRENT" ? String() : port + " ";
+    }
+
+    inline String configuredOutputPort() {
+        return GNSS_UNICORE_PORT == 0 ? String() : "com" + String(GNSS_UNICORE_PORT);
     }
 
     inline Command asciiCommand(const String &text)
@@ -62,7 +70,7 @@ using namespace GnssCmdBuilder;
 
             for (size_t i = 0; i < group.count; ++i)
             {
-                commands.push_back(asciiCommand(String(group.items[i]) + " " + port + " 1\r\n"));
+                commands.push_back(asciiCommand(String(group.items[i]) + " " + outputPortArgument(port) + "1\r\n"));
                 commands.push_back(delayCommand(200));
             }
         };
@@ -109,7 +117,7 @@ using namespace GnssCmdBuilder;
         for (size_t i = 0; i < rtcm.size(); ++i)
             if (std::find(rtcm.begin(), rtcm.begin() + i, rtcm[i]) == rtcm.begin() + i)
             {
-                commands.push_back(asciiCommand("rtcm" + rtcm[i] + " " + port + " 1\r\n"));
+                commands.push_back(asciiCommand("rtcm" + rtcm[i] + " " + outputPortArgument(port) + "1\r\n"));
                 commands.push_back(delayCommand(200));
             }
     }
@@ -122,23 +130,7 @@ using namespace GnssCmdBuilder;
         if (!isValidUnicorePort(normalizedPort)) return {};
         CommandList commands;
         for (const char *message : {"1019", "1020", "1042", "1044", "1045"})
-            commands.push_back(asciiCommand("rtcm" + String(message) + " " + normalizedPort + " 1\r\n"));
-        return commands;
-    }
-
-    CommandList buildLteConfig(const String &setupMethod, uint32_t duration, double lat, double lon, double alt)
-    {
-        CommandList commands = {asciiCommand("FRESET\r\n"), asciiCommand("unlogall\r\n")};
-        String method = setupMethod;
-        method.toUpperCase();
-        commands.push_back(method == "SURVEY_IN" ? asciiCommand("mode base time " + String(duration) + "\r\n") : asciiCommand("mode base " + String(lat, 10) + " " + String(lon, 10) + " " + String(alt, 4) + "\r\n"));
-        static constexpr std::array<const char *, 17> RTCM = {
-            "1006", "1033", "1074", "1124", "1084", "1094", "1114", "1077", "1127",
-            "1087", "1097", "1117", "1042", "1019", "1020", "1045", "1044",
-        };
-        for (const char *message : RTCM)
-            commands.push_back(asciiCommand("rtcm" + String(message) + " com2 1\r\n"));
-        commands.push_back(asciiCommand("saveconfig\r\n"));
+            commands.push_back(asciiCommand("rtcm" + String(message) + " " + outputPortArgument(normalizedPort) + "1\r\n"));
         return commands;
     }
 
@@ -146,12 +138,14 @@ using namespace GnssCmdBuilder;
         CommandList commands;
         commands.push_back(asciiCommand("unlogall\r\n"));
         commands.push_back(delayCommand(1000));
-        const String cmd = "mode base time " + String(duration) + "\r\n";
+        commands.push_back(asciiCommand("config undulation 0.0\r\n"));
+        const String cmd = "mode base time " + String(duration) + " 0\r\n";
         Serial.printf("Survey-In command: %s", cmd.c_str());
         commands.push_back(asciiCommand(cmd));
         commands.push_back(delayCommand(2000));
-        Serial.printf("Configuring Unicore output messages on COM%d\n", GNSS_UNICORE_PORT);
-        appendUnicoreOutputCommands(commands, "com" + String(GNSS_UNICORE_PORT), options);
+        const String port = configuredOutputPort();
+        Serial.printf("Configuring Unicore output messages on %s\n", port.isEmpty() ? "current command port" : port.c_str());
+        appendUnicoreOutputCommands(commands, port, options);
         commands.push_back(asciiCommand("saveconfig\r\n"));
 
         return commands;
@@ -165,8 +159,9 @@ using namespace GnssCmdBuilder;
         Serial.printf("Fixed position command: %s", cmd.c_str());
         commands.push_back(asciiCommand(cmd));
         commands.push_back(delayCommand(2000));
-        Serial.printf("Configuring Unicore output messages on COM%d\n", GNSS_UNICORE_PORT);
-        appendUnicoreOutputCommands(commands, "com" + String(GNSS_UNICORE_PORT), options);
+        const String port = configuredOutputPort();
+        Serial.printf("Configuring Unicore output messages on %s\n", port.isEmpty() ? "current command port" : port.c_str());
+        appendUnicoreOutputCommands(commands, port, options);
         commands.push_back(asciiCommand("saveconfig\r\n"));
 
         return commands;
@@ -187,18 +182,36 @@ using namespace GnssCmdBuilder;
             if (!isDigit(normalizedMessage[i]))
                 return commands;
 
-        commands.push_back(asciiCommand("rtcm" + normalizedMessage + " " + normalizedPort +
-                                        " " + String(enabled ? 1 : 0) + "\r\n"));
+        commands.push_back(asciiCommand("rtcm" + normalizedMessage + " " + outputPortArgument(normalizedPort)
+                                        + String(enabled ? 1 : 0) + "\r\n"));
         commands.push_back(asciiCommand("saveconfig\r\n"));
 
         return commands;
     }
 
+    CommandList buildBaseAllRtcmOutputCommand(const String &port, bool enabled) {
+        String normalizedPort = port;
+        normalizedPort.trim();
+        normalizedPort.toUpperCase();
+        if (!isValidUnicorePort(normalizedPort)) return {};
+
+        static constexpr std::array<const char *, 17> RTCM = {
+            {"1006", "1033", "1074", "1124", "1084", "1094", "1114", "1077", "1127",
+             "1087", "1097", "1117", "1042", "1019", "1020", "1045", "1044"}
+        };
+        CommandList commands;
+        for (const char *message : RTCM)
+            commands.push_back(asciiCommand("rtcm" + String(message) + " " + outputPortArgument(normalizedPort)
+                                            + String(enabled ? 1 : 0) + "\r\n"));
+        commands.push_back(asciiCommand("saveconfig\r\n"));
+        return commands;
+    }
+
     CommandList buildRoverCommand() {
-        const String port = "com" + String(GNSS_UNICORE_PORT);
+        const String port = outputPortArgument(configuredOutputPort());
         return {asciiCommand("mode rover\r\n"),
-                asciiCommand("gpgga " + port + " 1\r\n"),
-                asciiCommand("gpgst " + port + " 1\r\n"),
+                asciiCommand("gpgga " + port + "1\r\n"),
+                asciiCommand("gpgst " + port + "1\r\n"),
                 asciiCommand("saveconfig\r\n")};
 
     }

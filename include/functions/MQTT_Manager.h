@@ -13,6 +13,8 @@ extern SemaphoreHandle_t tcpStreamMutex;
 
 // ================= KHAI BÁO HÀM =================
 
+// Caller owns tcpStreamMutex once networking tasks are running.
+bool probeMqttTransport(bool useGsm);
 int setupMQTT();
 int connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);

@@ -20,6 +20,10 @@ public:
         assign(buffer);
     }
     bool isEmpty() const { return empty(); }
+    int indexOf(char value) const { const auto pos = find(value); return pos == npos ? -1 : int(pos); }
+    bool concat(const char *value, size_t length) { append(value, length); return true; }
+    bool concat(const char *value) { append(value); return true; }
+    bool concat(char value) { push_back(value); return true; }
     bool endsWith(const String &suffix) const {
         return size() >= suffix.size() && compare(size() - suffix.size(), suffix.size(), suffix) == 0;
     }

@@ -57,10 +57,10 @@ namespace GnssCmdBuilder
     CommandList buildBaseRtcmOutputCommand(const String &message,
                                            const String &port, bool enabled,
                                            GnssSensorType sensorType);
+    CommandList buildBaseAllRtcmOutputCommand(const String &port, bool enabled,
+                                              GnssSensorType sensorType);
     CommandList buildRoverCommand(GnssSensorType sensorType);
     void routeUbloxOutput(uint8_t *data, size_t length);
-    CommandList buildLteUnicoreConfig(const String &setupMethod, uint32_t duration = 60,
-                                            double lat = 0, double lon = 0, double alt = 0);
     Command commandListToBytes(const CommandList &commands);
 
     #if PROGRAM_DEBUG

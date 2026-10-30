@@ -170,10 +170,14 @@ Các lệnh này cấu hình module GNSS ở chế độ base và được gửi
 
 | Cú pháp | Giải thích |
 | --- | --- |
-| `ATG GNSS BASE SURVEY_IN <thời_gian> <độ_chính_xác>` | Bật chế độ khảo sát vị trí base. `<thời_gian>` là thời gian khảo sát tối thiểu, tính bằng giây; `<độ_chính_xác>` là ngưỡng độ chính xác, tính bằng mét. Ví dụ: `ATG GNSS BASE SURVEY_IN 300 1.0`. |
+| `ATG GNSS ROVER` | Chuyển module GNSS sang chế độ rover và bật output GGA/GST cần thiết. |
+| `ATG GNSS BASE SURVEY_IN <thời_gian> <độ_chính_xác>` | Bật khảo sát vị trí base và chỉ xuất RTCM. `<thời_gian>` tính bằng giây; `<độ_chính_xác>` tính bằng mét. Ví dụ: `ATG GNSS BASE SURVEY_IN 300 1.0`. |
+| `ATG GNSS BASE SURVEY_IN <thời_gian> <độ_chính_xác> W_DIAG` | Bật khảo sát base và xuất cả RTCM lẫn các bản tin diagnostic NMEA. Ví dụ: `ATG GNSS BASE SURVEY_IN 300 1.0 W_DIAG`. |
 | `ATG GNSS BASE FIXED <vĩ_độ> <kinh_độ> <độ_cao> <độ_chính_xác>` | Cấu hình vị trí base cố định theo LLA. Vĩ độ và kinh độ ở đơn vị độ thập phân, độ cao và độ chính xác ở mét. Ví dụ: `ATG GNSS BASE FIXED 10.7769 106.7009 12.5 0.5`. |
 | `ATG GNSS BASE <RTCM_MSG_TYPE> <PORT> ON` | Bật loại bản tin RTCM trên cổng GNSS chỉ định. |
-| `ATG GNSS BASE <RTCM_MSG_TYPE> <PORT> OFF` | Tắt loại bản tin RTCM trên cổng GNSS chỉ định. Với Unicore dùng `COM1`, `COM2` hoặc `COM3`; với UBlox dùng `I2C`, `UART1`, `UART2`, `USB` hoặc `SPI`. Ví dụ: `ATG GNSS BASE 1074 UART2 OFF`. |
+| `ATG GNSS BASE <RTCM_MSG_TYPE> <PORT> OFF` | Tắt loại bản tin RTCM trên cổng GNSS chỉ định. Với Unicore dùng `CURRENT` (cổng nhận lệnh), `COM1`, `COM2` hoặc `COM3`; với UBlox dùng `I2C`, `UART1`, `UART2`, `USB` hoặc `SPI`. Ví dụ: `ATG GNSS BASE 1074 UART2 OFF`. |
+| `ATG GNSS BASE ALL <PORT> <ON/OFF>` | Bật hoặc tắt toàn bộ các bản tin RTCM được firmware hỗ trợ trên cổng chỉ định. |
+| `ATG GNSS BASE 1006 CURRENT ON` | Với Unicore, bật RTCM1006 mỗi giây trên cổng đang nối ESP32; không chạy lại Survey-In hay đổi tọa độ. |
 | `ATG GNSS SET CHIP <UBLOX/UNICORE>` | Chọn loại chip GNSS, lưu vào Preferences và khởi động lại ESP32 để áp dụng. |
 
 ### ESP

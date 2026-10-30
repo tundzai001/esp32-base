@@ -6,3 +6,4 @@ compile_commands.json
 .vscode/ipch
 .vscode/*.*
 **/.DS_Store
+**/__pycache__/

@@ -3,6 +3,7 @@
 #include "HardwareSerial.h"
 #include "Prog_Config.h"
 #include "functions/Backend_Agent.h"
+#include <cstdio>
 
 namespace {
 
@@ -10,6 +11,7 @@ constexpr size_t MAX_NMEA_LENGTH = 512;
 constexpr size_t MAX_RTCM_FRAME_LENGTH = 1029; // 3-byte header + 1023 + CRC
 
 String nmeaBuffer;
+String pendingRtcmData;
 uint8_t rtcmFrame[MAX_RTCM_FRAME_LENGTH] = {};
 size_t rtcmLength = 0;
 size_t rtcmExpectedLength = 0;
@@ -62,6 +64,8 @@ double nmeaCoordinate(const char *raw, const char *hemisphere) {
 }
 
 void setFixStatus(char *target, size_t capacity, int quality) {
+    if (!target || capacity == 0) return;
+
     const char *status = "UNKNOWN";
     switch (quality) {
         case 0: status = "NO_FIX"; break;
@@ -69,9 +73,10 @@ void setFixStatus(char *target, size_t capacity, int quality) {
         case 2: status = "DGPS"; break;
         case 4: status = "RTK_FIXED"; break;
         case 5: status = "RTK_FLOAT"; break;
+        case 7: status = "BASE_FIXED"; break;
         default: status = "NO_FIX"; break;
     }
-    strncpy(target, status, capacity - 1);
+    snprintf(target, capacity, "%s", status);
     target[capacity - 1] = '\0';
 }
 
@@ -100,7 +105,7 @@ void parseNmeaSentence(const String &rawSentence) {
     }
     if (fieldCount == 0) return;
 
-    const size_t typeLength = strlen(fields[0]);
+    const size_t typeLength = strnlen(fields[0], sizeof(fields[0]));
     if (typeLength < 3) return;
     const char *type = fields[0] + typeLength - 3;
 
@@ -173,7 +178,7 @@ void parseNmeaSentence(const String &rawSentence) {
 
     if (updateFix) setFixStatus(telemetry.fixStatus, sizeof(telemetry.fixStatus), fixQuality);
     if (strcmp(type, "GGA") == 0) {
-        strncpy(telemetry.lastGga, sentence.c_str(), sizeof(telemetry.lastGga) - 1);
+        snprintf(telemetry.lastGga, sizeof(telemetry.lastGga), "%s", sentence.c_str());
         telemetry.lastGga[sizeof(telemetry.lastGga) - 1] = '\0';
         telemetry.lastGgaMs = millis();
     }
@@ -307,11 +312,12 @@ void consumeByte(uint8_t value, String &rtcmOutput) {
 
 } // namespace
 
-String receiveRtcmFromGnss() {
-    if (Serial1.available() <= 0) {
-        return String();
-    }
+void bufferGnssQueryByte(uint8_t value) {
+    noteInputBytes(1);
+    consumeByte(value, pendingRtcmData);
+}
 
+String receiveRtcmFromGnss() {
     String rtcmData;
     rtcmData.reserve(1024);
     uint8_t buffer[128] = {};
@@ -319,6 +325,11 @@ String receiveRtcmFromGnss() {
     if (gnssSerialMutex == nullptr ||
         !xSemaphoreTake(gnssSerialMutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))) {
         return rtcmData;
+    }
+
+    if (!pendingRtcmData.isEmpty()) {
+        rtcmData = pendingRtcmData;
+        pendingRtcmData = "";
     }
 
     while (Serial1.available() > 0) {

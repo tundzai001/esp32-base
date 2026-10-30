@@ -8,7 +8,8 @@ enum class ConnectionType : uint8_t {
     GSM,
 };
 
-// Loaded once during setup from Preferences key CONNECTION_TYPE.
+// Active transport. Loaded from CONNECTION_TYPE at boot; a temporary Wi-Fi
+// fallback changes this value without overwriting the saved SIM preference.
 extern ConnectionType connectionType;
 
 void loadConnectionTypeFromPrefs();

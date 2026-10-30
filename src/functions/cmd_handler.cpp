@@ -175,6 +175,7 @@ std::vector<String> splitCommand(const String &command) {
 cmd_action_t handleGnssBaseCommand(const std::vector<String> &cmdWords) {
     GnssCmdBuilder::GnssOptions options;
     options.ports = {"UART1"};
+    options.outputMode = GnssCmdBuilder::OutputMode::RtcmOnly;
     GnssCmdBuilder::CommandList commands;
     prefs.begin("myPrefs", true);
     const String configuredSensorType = prefs.isKey("GNSS_MDL_TYPE")
@@ -196,8 +197,18 @@ cmd_action_t handleGnssBaseCommand(const std::vector<String> &cmdWords) {
 
     if (cmdWords[0] == "SURVEY_IN") {
         Serial.println("[MQTT COMMAND DOWNLINK] Lenh yeu cau cau hinh GNSS BASE SURVEY_IN");
-        if (!cmd_helper::hasExactArgumentCount(cmdWords, 3, "GNSS BASE SURVEY_IN")) {
+        if (cmdWords.size() != 3 && cmdWords.size() != 4) {
+            Serial.println("[MQTT COMMAND DOWNLINK] LOI - GNSS BASE SURVEY_IN can 2 hoac 3 tham so.");
             return CMD_ACTION_NONE;
+        }
+        if (cmdWords.size() == 4) {
+            String outputMode = cmdWords[3];
+            outputMode.toUpperCase();
+            if (outputMode != "W_DIAG") {
+                Serial.println("[MQTT COMMAND DOWNLINK] LOI - Tham so thu ba phai la W_DIAG.");
+                return CMD_ACTION_NONE;
+            }
+            options.outputMode = GnssCmdBuilder::OutputMode::DiagnosticsRtcm;
         }
         uint32_t duration = cmdWords[1].toInt();
         float accuracy = cmdWords[2].toFloat();
@@ -223,6 +234,8 @@ cmd_action_t handleGnssBaseCommand(const std::vector<String> &cmdWords) {
 
         return CMD_ACTION_NONE;
     } else if (cmdWords.size() == 3) {
+        String message = cmdWords[0];
+        message.toUpperCase();
         String action = cmdWords[2];
         action.toUpperCase();
         if (action != "ON" && action != "OFF") {
@@ -232,7 +245,9 @@ cmd_action_t handleGnssBaseCommand(const std::vector<String> &cmdWords) {
         const bool enabled = action == "ON";
         Serial.println("[MQTT COMMAND DOWNLINK] Lenh yeu cau " + action + " RTCM " + cmdWords[0] +
                        " tren cong " + cmdWords[1]);
-        commands = GnssCmdBuilder::buildBaseRtcmOutputCommand(cmdWords[0], cmdWords[1], enabled, sensorType);
+        commands = message == "ALL"
+            ? GnssCmdBuilder::buildBaseAllRtcmOutputCommand(cmdWords[1], enabled, sensorType)
+            : GnssCmdBuilder::buildBaseRtcmOutputCommand(cmdWords[0], cmdWords[1], enabled, sensorType);
         if (commands.empty()) {
             Serial.println("[MQTT COMMAND DOWNLINK] LOI - RTCM message hoac cong khong hop le.");
             return CMD_ACTION_NONE;

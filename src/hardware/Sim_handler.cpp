@@ -50,9 +50,9 @@ bool startSIM() {
     delay(3000);
     return true;
 }
-bool connectGSM() {
+bool connectGSM(uint8_t maxAttempts) {
     uint8_t retries = 0;
-    while (retries <= 5) {
+    while (retries < maxAttempts) {
         retries++;
         String simOperator = modem.getProvider();
         SerialMon.println("[GSM] Nha mang GSM: " + simOperator);

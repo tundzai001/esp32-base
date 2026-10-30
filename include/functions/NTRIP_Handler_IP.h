@@ -23,6 +23,7 @@ bool isNtripConnected();
 void stopNtrip();
 bool ntripServerConnected(uint8_t serverId);
 uint32_t ntripServerBps(uint8_t serverId);
+String ntripServerError(uint8_t serverId);
 Client& activeNtripClient();
 
 // Temporary rover-side NTRIP session used by the auto-base/reference

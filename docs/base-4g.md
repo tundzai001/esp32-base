@@ -19,16 +19,53 @@ không tiếp tục dùng tọa độ của điểm đặt cũ.
 
 Loại GNSS được chọn từ CORS (`sensor_type`: `Ublox` hoặc `Unicorecomm`), lưu
 trong NVS và dùng cho auto base. Cùng một firmware chứa cả hai bộ lệnh.
-Boot dò receiver bằng UBX-MON-VER hoặc VERSION trên các baud hỗ trợ;
+Boot chờ 2 giây rồi dò receiver bằng UBX-MON-VER hoặc VERSIONA trên các baud hỗ trợ;
 `UNKNOWN` có thể xuất hiện trước khi nhận diện hoặc khi chưa có phản hồi. Nhánh u-blox yêu cầu receiver hỗ trợ
 UBX-CFG-TMODE3, như ZED-F9P. Nhánh Unicore dùng bộ lệnh UM980/UM982 trong CORS.
+
+Survey-In Unicore xuất theo cấu hình UI: `RTCM only` gửi `unlogall` để tắt
+output cũ, rồi bật bộ RTCM MSM4/MSM7 đã chọn và lưu cấu hình. Firmware
+không tự hỏi GGA/GSA/GSV/GST định kỳ.
+Trước khi bắt đầu Survey-In, luồng Unicore đặt `config undulation 0.0` để
+receiver báo trực tiếp độ cao ellipsoid WGS 84. UI vẫn tính h bằng độ cao
+chip báo cộng undulation của từng BESTNAV, nên đọc được cả cấu hình cũ.
+Firmware tự đọc `MODE` và `BESTNAVA` mỗi 30 giây, kể cả sau reboot, để cập nhật UI.
+`BESTNAV: FIXEDPOS` xác nhận UM đang giữ tọa độ Base; đây không phải phần trăm
+hay số giây lấy mẫu hợp lệ bên trong UM. Kết quả Survey-In gần nhất lưu NVS,
+vẫn có thể đối chiếu sau khi chuyển Fixed LLA hoặc khởi động lại ESP32.
+Thông tin vệ tinh trên dashboard dùng decoder RTCM; backend chỉ ưu tiên NMEA
+khi thực sự có GSV mới, không ẩn dữ liệu RTCM theo cấu hình NMEA đã lưu cũ.
+
+Truy vấn đọc UM được xử lý trong `Unicore_Readback.cpp`. Firmware gửi CRLF trước
+`MODE`/`BESTNAVA` để kết thúc dòng đầu vào còn dang dở; thao tác này không đổi
+mode hoặc chạy lại Survey-In. Log `[GNSS][READBACK]` ghi lệnh gửi, ACK và số byte
+nhận để phân biệt timeout với lỗi phản hồi/checksum.
+Các byte RTCM/NMEA đi qua trong lúc truy vấn vẫn được đưa qua bộ đọc UART và
+giữ frame RTCM để luồng NTRIP gửi tiếp. NTRIP ghi nguyên dòng phản hồi lỗi caster
+vào Serial và `ntrip_status.serverN.error`; tốc độ nhận từ chip và tốc độ gửi
+lên caster là hai số riêng.
+
+Khi BESTNAV báo `SOL_COMPUTED,FIXEDPOS`, UI hiển thị tọa độ Base đang giữ và cho
+sao chép hoặc điền vào Fixed LLA để người dùng kiểm tra/hiệu chỉnh trước khi áp
+dụng. Vĩ độ, kinh độ lấy từ chuỗi BESTNAV gốc để giữ số lẻ. Độ cao h ellipsoid
+được tính từ độ cao báo trong BESTNAV cộng undulation trong **cùng bản tin**;
+undulation bằng 0 thì giữ nguyên độ cao. Giá trị này phụ thuộc cấu hình undulation
+của chip, không phải geoid địa phương đã hiệu chỉnh. Khi áp dụng Fixed LLA với
+`altitude_reference=ELLIPSOID`, backend hiện có đặt `config undulation 0.0` trước
+`mode base`. Sao chép/điền form không gửi lệnh cấu hình xuống chip.
+
+`Backend_Agent.cpp` giữ khởi tạo, kết nối và vòng lặp điều phối. Xử lý lệnh nằm
+trong `Backend_Agent_Commands.cpp`, payload trạng thái trong `Backend_Agent_Status.cpp`,
+workflow Auto Base/đối chiếu trong `Backend_Agent_Workflows.cpp`, phép chiếu tọa độ
+trong `Backend_Agent_Projection.cpp`. Các phần này dùng chung lớp `BackendAgent`.
 
 ## Kết nối phần cứng
 
 - ESP32 TDM240x: RX GNSS GPIO18, TX GNSS GPIO19; UART GNSS 115200 baud.
-- Unicore: nối cổng COM2 của receiver theo cấu hình mặc định. Có thể đặt
-  hằng `GNSS_UNICORE_PORT` trong `include/Prog_Config.h` nếu dây nối dùng cổng khác;
-  phải đối chiếu cả nhánh bootstrap COM2, không dùng `-D` để ghi đè hằng C++ này.
+- Unicore: mặc định `GNSS_UNICORE_PORT = 0`; output sau cấu hình BASE dùng ngay
+  cổng receiver đang nhận lệnh từ ESP32, không giả định dây nối COM2. Giá trị 1–3
+  buộc output sang COM1–3 nếu phần cứng cần cổng cụ thể. Nhánh bootstrap lần đầu/reset
+  vẫn cấu hình COM2; phải đối chiếu dây nối trước khi reset mặc định.
 - u-blox: nối UART1, đặt UART1 115200 baud trước khi dùng. Firmware chuyển
   cấu hình output USB/UART2 do backend tạo sang UART1 và tính lại checksum UBX.
 - Modem: RX ESP32 GPIO16, TX ESP32 GPIO17; APN theo SIM/nhà mạng.
@@ -36,6 +73,11 @@ UBX-CFG-TMODE3, như ZED-F9P. Nhánh Unicore dùng bộ lệnh UM980/UM982 trong
 Firmware chỉ chạy bootstrap theo chip nhận diện trong lần đầu/reset mặc định;
 không ghi lại cấu hình UM980 vô điều kiện ở mọi lần boot. Với Unicore, các lệnh log COM3 do backend
 tạo được chuyển sang cổng nối ESP32. Tọa độ và thời gian khảo sát giữ nguyên.
+
+Nếu GGA đã báo Base cố định mà UART vẫn không có RTCM, sau khi nạp firmware mới
+có thể thử `ATG GNSS BASE 1006 CURRENT ON` qua Serial Monitor. Lệnh này bật RTCM1006
+trên cổng nhận lệnh, không đổi tọa độ hoặc chạy lại khảo sát. Khi thấy frame RTCM
+tăng, dùng `ATG GNSS BASE ALL CURRENT ON` để bật toàn bộ danh sách RTCM hỗ trợ.
 
 ## Đưa thiết bị lên CORS
 
@@ -114,14 +156,14 @@ Chạy kiểm tra host, không cần gắn ESP32:
 
 ```sh
 c++ -std=c++17 -fsanitize=address,undefined -g -Itest/host -Iinclude \
-  test/host/base_checks.cpp src/functions/gnss_cmd_builder.cpp src/functions/ublox_commands.cpp src/functions/unicore_commands.cpp \
+  test/host/base_checks.cpp src/functions/Unicore_Log.cpp src/functions/gnss_cmd_builder.cpp src/functions/ublox_commands.cpp src/functions/unicore_commands.cpp \
   -o /tmp/esp32-base-checks
 /tmp/esp32-base-checks
 python3 -B test/host/check_cors.py /path/to/cors /tmp/esp32-base-checks
 ```
 
 Kiểm tra này chạy bộ tạo lệnh C++ thật, kiểm tra khóa, checksum, routing UART
-và đưa lệnh sinh từ `cors_dashboard/backend/app/command_builder.py` thật qua
+  và đưa lệnh sinh từ `cors_dashboard/backend/app/command_builder.py` thật qua
 bộ routing firmware cho fixed/survey của cả hai loại chip.
 
 Kiểm tra thực địa còn cần: nhận đúng GNSS, survey hoàn tất, auto base đạt FIX,

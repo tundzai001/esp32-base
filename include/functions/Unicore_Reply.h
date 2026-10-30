@@ -52,7 +52,7 @@ struct UnicoreReply {
     }
 
     bool parse() {
-        if (!key[0] || std::strlen(line) < 9 || !equal(line, 9, "$command,")) return false;
+        if (!key[0] || strnlen(line, 384) < 9 || !equal(line, 9, "$command,")) return false;
         const char *command = line + 9;
         const char *comma = std::strchr(command, ',');
         if (!comma) return false;
@@ -62,9 +62,9 @@ struct UnicoreReply {
         if (!equal(command, static_cast<size_t>(endKey - command), key)) return false;
         const char *response = comma + 1;
         while (std::isspace(static_cast<unsigned char>(*response))) ++response;
-        if (std::strlen(response) < 9 || !equal(response, 9, "response:")) return false;
+        if (strnlen(response, 384) < 9 || !equal(response, 9, "response:")) return false;
         response += 9;
-        const char *end = line + std::strlen(line);
+        const char *end = line + strnlen(line, 384);
         const char *star = std::strchr(response, '*');
         if (star) {
             if (end - star != 3 || hex(star[1]) < 0 || hex(star[2]) < 0) return false;

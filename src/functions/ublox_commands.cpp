@@ -340,6 +340,23 @@ using namespace GnssCmdBuilder;
         return commands;
     }
 
+    CommandList buildBaseAllRtcmOutputCommand(const String &port, bool enabled) {
+        String normalizedPort = port;
+        normalizedPort.trim();
+        normalizedPort.toUpperCase();
+
+        CommandList commands;
+        if (!isValidRtcmPort(normalizedPort))
+            return commands;
+
+        std::vector<std::pair<uint32_t, bool>> entries;
+        for (const auto &rtcm : RTCM_KEYS)
+            entries.emplace_back(keyForPort(rtcm.keys, normalizedPort), enabled);
+        commands.push_back(ubxCfgValsetU1(entries));
+        commands.emplace_back(std::begin(UBLOX_SAVE_CONFIG), std::end(UBLOX_SAVE_CONFIG));
+        return commands;
+    }
+
     CommandList buildRoverCommand() {
         // Enable correction input and GGA/GST output on UART1, UART2 and USB.
         Command mode = buildTmode3Message();

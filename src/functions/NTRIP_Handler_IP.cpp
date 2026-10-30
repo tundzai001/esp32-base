@@ -6,6 +6,7 @@
 #include "functions/Backend_Agent.h"
 #include "functions/RTCM_Receiver.h"
 #include "functions/unicore_commands.h"
+#include "functions/Unicore_Identification.h"
 #include "hardware/Sim_handler.h"
 #include "hardware/Wifi_handler.h"
 
@@ -107,26 +108,19 @@ namespace {
 
   bool receiveUnicoreIdentification(uint32_t timeoutMs)
   {
-    String response;
-    response.reserve(512);
+    UnicoreIdentification identity;
     const uint32_t start = millis();
     while (millis() - start < timeoutMs) {
       while (Serial1.available() > 0) {
-        response += static_cast<char>(Serial1.read());
+        if (identity.feed(static_cast<uint8_t>(Serial1.read()))) {
+          Serial.printf("[GNSS][UNICORE RESPONSE] %s\n", identity.line);
+          return true;
+        }
       }
       delay(2);
     }
 
-    response.toUpperCase();
-    const bool identified = response.indexOf("$COMMAND,VERSION") >= 0 ||
-           response.indexOf("#VERSION") >= 0 ||
-           response.indexOf("VERSION") >= 0 ||
-           response.indexOf("UNICORE") >= 0 ||
-           response.indexOf("UM980") >= 0 ||
-           response.indexOf("UM982") >= 0 ||
-           response.indexOf("UM98") >= 0;
-    if (identified) Serial.println("[GNSS][UNICORE RESPONSE] " + response.substring(0, 160));
-    return identified;
+    return false;
   }
 } // namespace
 
@@ -188,6 +182,7 @@ struct NtripEndpoint {
     uint32_t bytesPerSecond = 0;
     uint32_t windowStartedMs = 0;
     uint32_t lastKeepAliveMs = 0;
+    String lastError;
 };
 
 NtripEndpoint endpoints[NTRIP_SERVER_COUNT];
@@ -301,7 +296,7 @@ void loadEndpoints() {
 
 bool streamActive(uint8_t index) {
     if (index >= NTRIP_SERVER_COUNT || backendDeviceLocked(index + 1)
-        || !backendLicenseValid() || !backendDeviceProvisioned()) return false;
+        || !backendLicenseValid() || !backendDeviceProvisioned() || !backendBaseStartupConfigured()) return false;
     DynamicJsonDocument serviceDoc(CONFIG_DOCUMENT_SIZE);
     if (deserializeJson(serviceDoc, backendAgent.serviceConfigJson()) != DeserializationError::Ok
         || !serviceDoc.is<JsonObject>()) {
@@ -316,11 +311,11 @@ void stopEndpoint(uint8_t index) {
     clearEndpointState(endpoints[index]);
 }
 
-bool waitForNtripResponse(Client &client) {
+bool waitForNtripResponse(Client &client, String *statusLine = nullptr) {
     String response;
     response.reserve(512);
     const uint32_t deadline = millis() + 10000UL;
-    while (client.connected() && millis() < deadline && response.length() < 4096) {
+    while ((client.connected() || client.available() > 0) && millis() < deadline && response.length() < 4096) {
         while (client.available() > 0 && response.length() < 4096) {
             const int value = client.read();
             if (value < 0) break;
@@ -329,6 +324,12 @@ bool waitForNtripResponse(Client &client) {
         }
         if (response.indexOf("\r\n\r\n") >= 0) break;
         delay(1);
+    }
+    if (statusLine) {
+        const int end = response.indexOf('\n');
+        *statusLine = response.substring(0, end >= 0 ? end : 240);
+        statusLine->trim();
+        if (statusLine->isEmpty()) *statusLine = "No response from caster (timeout or closed connection)";
     }
     return response.indexOf("ICY 200 OK") >= 0
         || response.indexOf("HTTP/1.1 200 OK") >= 0
@@ -368,6 +369,8 @@ bool connectEndpoint(uint8_t index) {
                    + endpoint.host + ":" + String(endpoint.port)
                    + "/" + endpoint.mountpoint);
     if (!client.connect(endpoint.host.c_str(), endpoint.port)) {
+        endpoint.lastError = "TCP connection failed";
+        Serial.printf("[NTRIP][ERROR] S%u: %s\n", index + 1, endpoint.lastError.c_str());
         clearEndpointState(endpoint);
         return false;
     }
@@ -393,14 +396,18 @@ bool connectEndpoint(uint8_t index) {
     }
     client.print(request);
 
-    if (!waitForNtripResponse(client)) {
-        Serial.println("[NTRIP] Caster tu choi S" + String(index + 1));
+    String responseLine;
+    if (!waitForNtripResponse(client, &responseLine)) {
+        if (!endpoint.password.isEmpty()) responseLine.replace(endpoint.password, "[redacted]");
+        endpoint.lastError = responseLine;
+        Serial.printf("[NTRIP][ERROR] Caster tu choi S%u: %s\n", index + 1, responseLine.c_str());
         client.stop();
         clearEndpointState(endpoint);
         return false;
     }
 
     endpoint.authenticated = true;
+    endpoint.lastError = "";
     endpoint.windowStartedMs = millis();
     endpoint.bytesInWindow = 0;
     endpoint.bytesPerSecond = 0;
@@ -658,6 +665,8 @@ int bootstrapUblox() {
 }
 
 GnssCmdBuilder::GnssSensorType detectGnssSensorType() {
+  Serial.println("[GNSS] Cho receiver khoi dong 2000 ms truoc khi probe.");
+  delay(2000);
   const uint32_t baudRates[] = {GNSS_BAUD, 38400, 9600, 19200, 57600, 230400, 460800};
   for (const uint32_t baud : baudRates) {
     Serial1.updateBaudRate(baud);
@@ -672,16 +681,23 @@ GnssCmdBuilder::GnssSensorType detectGnssSensorType() {
     }
 
     clearGnssInput();
-    Serial1.print("VERSION\r\n");
+    Serial1.print("VERSIONA\r\n");
     Serial1.flush();
     delay(50);
     if (receiveUnicoreIdentification(1000)) {
-      Serial.printf("[GNSS] Da nhan dien Unicore qua lenh VERSION, baud=%lu.\n", static_cast<unsigned long>(baud));
+      Serial.printf("[GNSS] Da nhan dien Unicore qua lenh VERSIONA, baud=%lu.\n", static_cast<unsigned long>(baud));
       return GnssCmdBuilder::GnssSensorType::Unicore;
     }
   }
 
   Serial1.updateBaudRate(GNSS_BAUD);
+  delay(30);
+  clearGnssInput();
+  Serial.printf("[GNSS] Thu lai VERSIONA tai baud=%lu sau khi receiver da khoi dong.\n",
+                static_cast<unsigned long>(GNSS_BAUD));
+  Serial1.print("VERSIONA\r\n");
+  Serial1.flush();
+  if (receiveUnicoreIdentification(1500)) return GnssCmdBuilder::GnssSensorType::Unicore;
   Serial.println("[GNSS][ERROR] Khong the nhan dien chip GNSS.");
   return GnssCmdBuilder::GnssSensorType::Invalid;
 }
@@ -776,6 +792,11 @@ uint32_t ntripServerBps(uint8_t serverId) {
     if (serverId < 1 || serverId > NTRIP_SERVER_COUNT) return 0;
     updateBps(endpoints[serverId - 1]);
     return endpoints[serverId - 1].bytesPerSecond;
+}
+
+String ntripServerError(uint8_t serverId) {
+    if (serverId < 1 || serverId > NTRIP_SERVER_COUNT) return String();
+    return endpoints[serverId - 1].lastError;
 }
 
 bool startNtripRover(const String &host, const uint16_t port, const String &username,

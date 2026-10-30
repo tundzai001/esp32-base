@@ -27,6 +27,6 @@ extern TinyGsm        modem;
 #endif
 
 bool startSIM();
-bool connectGSM();
+bool connectGSM(uint8_t maxAttempts = 6);
 
 #endif

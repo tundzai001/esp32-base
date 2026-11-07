@@ -29,6 +29,6 @@ python3 -m pip install reportlab
 python3 docs/render_catalogues.py
 ```
 
-Renderer dùng Arial/Menlo trên macOS hoặc DejaVu trong `/usr/share/fonts/truetype/dejavu` trên Linux. Có thể chỉ định thư mục chứa DejaVuSans.ttf, DejaVuSans-Bold.ttf, DejaVuSans-Oblique.ttf và DejaVuSansMono.ttf bằng `--font-dir`. Mặc định PDF ghi đè tên hiện có trong docs; `--output-dir` cho phép xuất sang thư mục kiểm tra.
+Renderer dùng Arial/Menlo trên macOS hoặc DejaVu trong `/usr/share/fonts/truetype/dejavu` trên Linux. Có thể chỉ định thư mục chứa DejaVuSans.ttf, DejaVuSans-Bold.ttf, DejaVuSans-Oblique.ttf và DejaVuSansMono.ttf bằng `--font-dir`. Mặc định PDF ghi đè tên hiện có trong docs; `--output-dir` cho phép xuất sang thư mục con bên trong docs.
 
 Sau khi xuất: mở PDF, kiểm tra chữ tiếng Việt, bảng dài qua trang, ví dụ lệnh, hình u-center và số trang. Đồng bộ Markdown, PDF, hình và renderer giữa `Desktop/tun/esp32/docs` và `cors/geodetic/esp32/docs`. Không đồng bộ thư mục build hoặc compilation database theo đường dẫn máy.

@@ -19,8 +19,8 @@ inline constexpr int TX_GNSS = 19; // ESP32 TX nối RX của receiver GNSS.
 inline constexpr int LED_PIN = 2;
 #endif
 inline constexpr int GNSS_BAUD = 115200;
-// UART on the Unicore receiver connected to the ESP32 GNSS link.
-inline constexpr uint8_t GNSS_UNICORE_PORT = 2;
+// 0: output on the receiver port carrying this command; 1..3: force COM1..3.
+inline constexpr uint8_t GNSS_UNICORE_PORT = 0;
 
 // ================= CẤU HÌNH CÁC TASK =================
 inline constexpr int MUTEX_TIMEOUT_MS = 1500; // Thời gian tối đa để chờ mutex (ms)
@@ -28,8 +28,7 @@ inline constexpr int MUTEX_TIMEOUT_MS = 1500; // Thời gian tối đa để ch�
 // ================= CẤU HÌNH KẾT NỐI =================
 
 inline constexpr char WIFI_SSID[] = "AITOGY-VP";
-inline constexpr char WIFI_PASSWORD[] = "123456789";
-
+inline constexpr char WIFI_PASSWORD[] = "";
 
 inline constexpr uint8_t TX_TO_MODEM_RX = 17;
 inline constexpr uint8_t RX_TO_MODEM_TX = 16;

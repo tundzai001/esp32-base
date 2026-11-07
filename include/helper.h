@@ -8,14 +8,15 @@
 
 #include "hardware/Wifi_handler.h"
 #include "hardware/Sim_handler.h"
-#include "functions/MQTT_Manager.h"
+#include "functions/mqtt/MQTT_Manager.h"
 
-#include "functions/NTRIP_Handler_IP.h"
+#include "functions/ntrip/ntrip_base.h"
 
 // ================= ĐỊNH NGHĨA CÁC BIẾN TOÀN CỤC =================
 extern TinyGsm modem;
 
-class SerialCommandProcessor {
+class SerialCommandProcessor
+{
 public:
 	void processPending();
 

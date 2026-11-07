@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / "src/functions/NTRIP_Handler_IP.cpp").read_text()
+source = (root / "src/functions/ntrip/NTRIP_Handler_IP.cpp").read_text()
 sender = source.split("void sendRoverGgaIfAvailable(", 1)[1].split("\nbool connectEndpoint(", 1)[0]
 harness = r'''
 #include <cassert>

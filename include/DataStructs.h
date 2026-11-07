@@ -3,7 +3,8 @@
 
 #include <WString.h>
 
-struct gga_data_struct {
+struct gga_data_struct
+{
   double lat;
   double lon;
   String rtk_status;

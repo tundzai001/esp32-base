@@ -11,7 +11,7 @@ restore = 'bool BackendAgent::restoreWorkflowBase(' + workflow.split('bool Backe
 snapshot = workflow[workflow.index('    DynamicJsonDocument previousBase(CONFIG_DOCUMENT_SIZE);'):workflow.index('    auto restorePreviousBase = [&]() {')]
 snapshot = 'bool BackendAgent::restoreSnapshot() {\n' + snapshot + '    surveyInTargetSeconds_ = 0; // Rover mode clears the live target after snapshot.\n    return restoreWorkflowBase(previousBase.as<JsonObjectConst>());\n}\n'
 ntrip = (root / 'src/functions/ntrip/ntrip_rover.cpp').read_text()
-rover = 'int loopNtripRover() {' + ntrip.split('int loopNtripRover() {', 1)[1].split('\nvoid stopNtripRover()', 1)[0]
+rover = 'int loopNtripRover()' + ntrip.split('int loopNtripRover()', 1)[1].split('\nvoid stopNtripRover()', 1)[0]
 shim = (root / 'test/host/Arduino.h').read_text().replace('#pragma once', '')
 harness = r'''
 #include <cassert>

@@ -76,9 +76,10 @@ int main() {
 setup = mapped(root / 'src/hardware/Wifi_handler.cpp', setup)
 with tempfile.TemporaryDirectory(prefix='esp-wifi-nvs-') as directory:
     path = Path(directory)
+    (path / 'Arduino.h').write_text(shim)
     (path / 'check.cpp').write_text(harness + setup + checks)
     compile_cpp(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                    '-I' + str(root / 'test/host'), '-I' + str(root / '.pio/libdeps/tdm240x_dev_general/ArduinoJson/src'),
+                    '-I' + str(path), '-I' + str(root / 'test/host'), '-I' + str(root / '.pio/libdeps/tdm240x_dev_general/ArduinoJson/src'),
                     str(path / 'check.cpp'), '-o', str(path / 'check')], check=True)
     run_cpp([str(path / 'check')], check=True)
 print('PASS: saved Wi-Fi reused; missing keys saved only after successful connection; absent legacy NVS is optional')

@@ -18,6 +18,7 @@ harness = r'''
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <array>
 #include <vector>
 #include <ArduinoJson.h>
 constexpr size_t CONFIG_DOCUMENT_SIZE = 4096;
@@ -59,7 +60,7 @@ bool xSemaphoreTake(void *, unsigned) { return true; }
 unsigned releases = 0;
 void xSemaphoreGive(void *) { ++releases; }
 using std::min;
-struct { const char *fixStatus = "SINGLE"; } snapshot;
+struct { std::array<char,16> fixStatus = {'S','I','N','G','L','E'}; } snapshot;
 auto getGnssTelemetrySnapshot() { return snapshot; }
 struct Client {
     std::vector<uint8_t> data;

@@ -63,7 +63,7 @@ bool locked=false,licensed=true,provisioned=true,configured=true;
 bool backendDeviceLocked(unsigned){return locked;}bool backendLicenseValid(){return licensed;}
 bool backendDeviceProvisioned(){return provisioned;}bool backendBaseStartupConfigured(){return configured;}
 bool backendControlPlaneFailOpen(){return false;}
-struct GnssTelemetrySnapshot{char lastGga[128]="$GNGGA,test";uint32_t lastGgaMs=10000;const char *fixStatus="RTK_FIXED";}snapshot;
+struct GnssTelemetrySnapshot{std::array<char,128> lastGga={'$','G','N','G','G','A',',','t','e','s','t'};uint32_t lastGgaMs=10000;std::array<char,16> fixStatus={'R','T','K','_','F','I','X','E','D'};}snapshot;
 auto getGnssTelemetrySnapshot(){return snapshot;}
 struct {bool shortWrite=false;std::vector<uint8_t> data;size_t write(const uint8_t *p,size_t n){if(shortWrite&&n)--n;data.insert(data.end(),p,p+n);return n;}}Serial1;
 // Public forward declaration normally supplied by ntrip_base.h.

@@ -31,13 +31,13 @@ checks = r'''
 int main() {
     parseNmeaSentence("$GNGGA,010000,2105.0994,N,10547.19936,E,4,20,0.7,20.5000,M,-28.5624,M,,*00");
     assert(telemetry.ggaCount == 1 && telemetry.satellites == 20);
-    assert(strcmp(telemetry.fixStatus, "RTK_FIXED") == 0);
+    assert(strcmp(telemetry.fixStatus.data(), "RTK_FIXED") == 0);
     assert(fabs(telemetry.latitude - 21.08499) < 1e-9);
     assert(fabs(telemetry.longitude - 105.786656) < 1e-9);
     assert(fabs(telemetry.altitude + 8.0624) < 1e-9);
     assert(telemetry.lastGgaMs == now);
     parseNmeaSentence("$GNGSA,A,3,,,,,,,,,,,,,1.0,0.7,0.8*00");
-    assert(strcmp(telemetry.fixStatus, "RTK_FIXED") == 0);
+    assert(strcmp(telemetry.fixStatus.data(), "RTK_FIXED") == 0);
     parseNmeaSentence("$GNGGA,010001,2105.0994,N,10547.19936,E,4,20,0.7,20.5,M,,M,,*00");
     assert(std::isnan(telemetry.altitude)); // Missing N is unknown, never zero.
     parseNmeaSentence("$GNGGA,010002,,,,,4,20,0.7,20.5,M,-28.5624,M,,*00");

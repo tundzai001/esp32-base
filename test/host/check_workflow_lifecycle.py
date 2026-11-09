@@ -17,6 +17,7 @@ harness = r'''
 #include "functions/backend/Base_Sample.h"
 #include "functions/backend/Vn2000_Datum.h"
 #include <cassert>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <vector>
@@ -51,7 +52,7 @@ namespace BackendAgentInternal {
 String epochString(){return "123";}
 bool jsonBool(JsonObjectConst object,const String &key,bool fallback){return object[key].isNull()?fallback:object[key].as<bool>();}
 }
-struct GnssTelemetrySnapshot {uint32_t lastGgaMs; const char *fixStatus; double latitude,longitude,altitude;};
+struct GnssTelemetrySnapshot {uint32_t lastGgaMs; std::array<char,16> fixStatus{}; double latitude,longitude,altitude;};
 struct BackendAgent {
     struct AutoBaseLocationReply{char json[1536];};
     void *workflowTask_=nullptr,*autoBaseLocationQueue_=reinterpret_cast<void*>(1);
@@ -89,7 +90,9 @@ bool averaging(){return current->agentState_=="auto_setup_averaging"||current->a
 int loopNtripRover(){return (fault=="lose_wait"&&!averaging())||(fault=="lose_average"&&averaging())?504:200;}
 GnssTelemetrySnapshot getGnssTelemetrySnapshot(){
     bool fixed=fault!="no_fix"&&!(fault=="no_samples"&&averaging());
-    return {now,fixed?"RTK_FIXED":"SINGLE",21.0,105.0,12.0};
+    GnssTelemetrySnapshot snapshot{};snapshot.lastGgaMs=now;
+    std::strcpy(snapshot.fixStatus.data(),fixed?"RTK_FIXED":"SINGLE");
+    snapshot.latitude=21.0;snapshot.longitude=105.0;snapshot.altitude=12.0;return snapshot;
 }
 void xQueueReset(void*){}
 unsigned xQueueReceive(void*,void *target,unsigned ticks){

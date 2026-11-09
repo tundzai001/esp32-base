@@ -13,6 +13,7 @@ shim = (root / 'test/host/Arduino.h').read_text().replace('#pragma once', '')
 shim = shim.replace('    void trim() {', '    bool startsWith(const String &value) const { return compare(0, value.size(), value) == 0; }\n    void trim() {')
 harness = r'''
 #include "functions/backend/Base_Sample.h"
+#include <array>
 #include <cassert>
 #include <cmath>
 using std::min;

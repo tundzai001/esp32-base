@@ -233,7 +233,7 @@ __attribute__((noreturn)) void healthCheckTask([[maybe_unused]] void* const para
             if (xSemaphoreTake(tcpStreamMutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))) {
                 if (isGsmConnection()) signalQualityDbm = modem.getSignalQuality();
                 healthPayload = formDeviceHealthString(signalQualityDbm, gnssDataOk,
-                                                       messageCounts.values);
+                                                       messageCounts.values.data());
                 xSemaphoreGive(tcpStreamMutex);
             }
         }

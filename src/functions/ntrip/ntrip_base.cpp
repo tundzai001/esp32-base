@@ -53,16 +53,14 @@ struct LocalNtripConfig
     uint16_t port = NTRIP_CASTER_PORT;
 };
 
-LocalNtripConfig loadLocalNtripConfig()
+void loadLocalNtripConfig(LocalNtripConfig &legacy)
 {
-    LocalNtripConfig legacy;
     prefs.begin("myPrefs", true);
     legacy.host = prefs.getString("NTRIP_SERVER", String(NTRIP_CASTER_ADDRESS));
     legacy.port = prefs.getUShort("NTRIP_PORT", NTRIP_CASTER_PORT);
     legacy.mountpoint = prefs.getString("NTRIP_MPT", String(NTRIP_MOUNTPOINT));
     legacy.password = prefs.getString("NT_AUTH_BS", String(NTRIP_AUTH_BASE_STATION));
     prefs.end();
-    return legacy;
 }
 
 String endpointHost(JsonObjectConst service, uint8_t index)
@@ -149,7 +147,8 @@ void loadEndpoints()
     const auto hasServiceConfig = deserializeJson(serviceDoc, serialized) == DeserializationError::Ok && serviceDoc.is<JsonObject>();
     const JsonObjectConst service = serviceDoc.as<JsonObjectConst>();
 
-    const LocalNtripConfig legacy = loadLocalNtripConfig();
+    LocalNtripConfig legacy;
+    loadLocalNtripConfig(legacy);
 
     for (uint8_t index = 0; index < NTRIP_SERVER_COUNT; ++index)
     {
@@ -302,9 +301,9 @@ int loopNTRIP(String &rtcmData) {
 
         if (!client.connected() || !endpoint.authenticated) {
             endpoint.authenticated = false;
-            if (millis() - endpoint.lastReconnectMs >= RECONNECT_INTERVAL_MS) {
-                if (connectEndpoint(index)) anyConnected = true;
-            }
+            if (millis() - endpoint.lastReconnectMs >= RECONNECT_INTERVAL_MS
+                    && connectEndpoint(index))
+                anyConnected = true;
             continue;
         }
 

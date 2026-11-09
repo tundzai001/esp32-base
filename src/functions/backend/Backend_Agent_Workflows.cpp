@@ -111,7 +111,7 @@ void BackendAgent::requestWorkflowStop() {
 }
 
 void BackendAgent::workflowTaskThunk(void *parameter) {
-    BackendAgent *agent = static_cast<BackendAgent *>(parameter);
+    auto *agent = static_cast<BackendAgent *>(parameter);
     if (agent) {
         agent->runWorkflow();
         agent->workflowPayload_ = String();
@@ -276,13 +276,13 @@ bool BackendAgent::waitForAutoBaseFix(uint32_t timeoutSeconds, uint8_t fixedStre
         if (static_cast<int32_t>(now - nextSecondMs) >= 0) {
             nextSecondMs = now + 1000UL;
             const GnssTelemetrySnapshot snapshot = getGnssTelemetrySnapshot();
-            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus);
+            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus.data());
             fixedStreak = usable ? static_cast<uint8_t>(fixedStreak + 1) : 0;
             fixed = fixedStreak >= fixedStreakRequired;
             DynamicJsonDocument details(1024);
             details["timeout"] = timeoutSeconds;
             details["elapsed"] = (now - waitStartedMs) / 1000UL;
-            details["fix_status"] = snapshot.fixStatus;
+            details["fix_status"] = snapshot.fixStatus.data();
             details["fixed_streak"] = fixedStreak;
             details["fixed_streak_required"] = fixedStreakRequired;
             String serialized;
@@ -326,7 +326,7 @@ bool BackendAgent::collectAutoBaseSamples(int configuredSamples, std::vector<dou
         if (static_cast<int32_t>(now - nextSecondMs) >= 0) {
             nextSecondMs = now + 1000UL;
             const GnssTelemetrySnapshot snapshot = getGnssTelemetrySnapshot();
-            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus);
+            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus.data());
             if (usable && snapshot.lastGgaMs != lastSampleGgaMs
                 && std::isfinite(snapshot.latitude) && std::isfinite(snapshot.longitude)
                 && std::isfinite(snapshot.altitude)
@@ -342,7 +342,7 @@ bool BackendAgent::collectAutoBaseSamples(int configuredSamples, std::vector<dou
             details["samples_target"] = samplesNeeded;
             details["averaging_seconds"] = averagingSeconds;
             details["elapsed"] = (now - averageStartedMs) / 1000UL;
-            details["fix_status"] = snapshot.fixStatus;
+            details["fix_status"] = snapshot.fixStatus.data();
             if (configuredSamples != samplesNeeded) {
                 details["requested_samples_overridden"] = configuredSamples;
             }
@@ -370,14 +370,14 @@ bool BackendAgent::collectAutoBaseSamples(int configuredSamples, std::vector<dou
 bool BackendAgent::runAutoBaseWorkflow(JsonObject payload) {
     String host = payload["ip"] | String();
     host.trim();
-    const uint16_t port = static_cast<uint16_t>(payload["port"] | 0);
+    const auto port = static_cast<uint16_t>(payload["port"] | 0);
     const String username = payload["user"] | String();
     const String password = payload["password"] | String();
     const String mountpoint = payload["mountpoint"] | String();
-    const uint8_t ntripVersion = static_cast<uint8_t>(payload["ntrip_version"] | 1);
+    const auto ntripVersion = static_cast<uint8_t>(payload["ntrip_version"] | 1);
     const uint32_t timeoutSeconds = constrain(
         static_cast<uint32_t>(payload["timeout"] | 3600UL), 30UL, 86400UL);
-    const uint8_t fixedStreakRequired = static_cast<uint8_t>(constrain(
+    const auto fixedStreakRequired = static_cast<uint8_t>(constrain(
         static_cast<int>(payload["fixed_streak_seconds"] | 5), 1, 60));
 
     DynamicJsonDocument previousBase(CONFIG_DOCUMENT_SIZE);
@@ -646,13 +646,13 @@ bool BackendAgent::runReferenceCheckWorkflow(JsonObject payload) {
     const double restoreLongitude = storedCoordinates["lon"] | NAN;
     const double restoreAltitude = storedCoordinates["alt"] | NAN;
     const String host = payload["ip"] | String();
-    const uint16_t port = static_cast<uint16_t>(payload["port"] | 0);
+    const auto port = static_cast<uint16_t>(payload["port"] | 0);
     const String username = payload["user"] | String();
     const String password = payload["password"] | String();
     const String mountpoint = payload["mountpoint"] | String();
     const uint32_t timeoutSeconds = constrain(
         static_cast<uint32_t>(payload["timeout"] | 300UL), 30UL, 86400UL);
-    const uint16_t requestedSamples = static_cast<uint16_t>(constrain(
+    const auto requestedSamples = static_cast<uint16_t>(constrain(
         static_cast<int>(payload["samples"] | 60), 5, 120));
 
     auto cleanup = [&]() {
@@ -727,9 +727,9 @@ bool BackendAgent::runReferenceCheckWorkflow(JsonObject payload) {
         if (static_cast<int32_t>(now - nextSecondMs) >= 0) {
             nextSecondMs = now + 1000UL;
             const GnssTelemetrySnapshot snapshot = getGnssTelemetrySnapshot();
-            fixed = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus);
+            fixed = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus.data());
             DynamicJsonDocument details(512);
-            details["fix_status"] = snapshot.fixStatus;
+            details["fix_status"] = snapshot.fixStatus.data();
             details["elapsed"] = (now - waitStartedMs) / 1000UL;
             String serialized;
             serializeJson(details, serialized);
@@ -768,7 +768,7 @@ bool BackendAgent::runReferenceCheckWorkflow(JsonObject payload) {
         if (static_cast<int32_t>(now - nextSecondMs) >= 0) {
             nextSecondMs = now + 1000UL;
             const GnssTelemetrySnapshot snapshot = getGnssTelemetrySnapshot();
-            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus);
+            const bool usable = freshRtkSample(now, snapshot.lastGgaMs, snapshot.fixStatus.data());
             if (usable && std::isfinite(snapshot.latitude) && std::isfinite(snapshot.longitude)
                 && std::isfinite(snapshot.altitude) && snapshot.latitude >= -90.0
                 && snapshot.latitude <= 90.0 && snapshot.longitude >= -180.0
@@ -780,7 +780,7 @@ bool BackendAgent::runReferenceCheckWorkflow(JsonObject payload) {
             DynamicJsonDocument details(768);
             details["samples_collected"] = latitudes.size();
             details["samples_target"] = requestedSamples;
-            details["fix_status"] = snapshot.fixStatus;
+            details["fix_status"] = snapshot.fixStatus.data();
             String serialized;
             serializeJson(details, serialized);
             setWorkflowProgress("reference_check_averaging", 3, 4, serialized);

@@ -6,6 +6,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 
@@ -14,39 +15,80 @@ extern SemaphoreHandle_t gnssSerialMutex;
 
 namespace UnicoreReadback {
 namespace {
+bool finishMultilineCandidate(char value, const char *prefix,
+                              String &candidate, String &response) {
+    if (!candidate.startsWith(prefix)) return false;
+
+    candidate += value;
+    if (candidate.endsWith("\r\n\r\n") || candidate.endsWith("\n\n")) {
+        response = candidate;
+        return true;
+    }
+
+    auto end = candidate.length();
+    while (end && (candidate[end - 1] == '\r' || candidate[end - 1] == '\n'
+                   || candidate[end - 1] == ' ')) {
+        --end;
+    }
+    if (end >= 9 && candidate[end - 9] == '*') {
+        candidate.remove(end);
+        response = candidate;
+        return true;
+    }
+    return false;
+}
+
+bool finishUnicoreCandidate(char value, const char *prefix, bool multiline,
+                            String &candidate, String &response) {
+    if (multiline && candidate.startsWith(prefix)) {
+        return finishMultilineCandidate(value, prefix, candidate, response);
+    }
+    if (candidate.startsWith(prefix)) {
+        response = candidate;
+        return true;
+    }
+    candidate = "";
+    return false;
+}
+
 bool appendUnicoreCandidate(char value, const char *prefix, bool multiline,
                             String &candidate, String &response) {
     if (value == prefix[0]) {
         candidate = String(value);
-    } else if (multiline && value == '\r' && !candidate.isEmpty()) {
+        return false;
+    }
+    if (multiline && value == '\r' && !candidate.isEmpty()) {
         candidate += value;
-    } else if (value == '\r' || value == '\n') {
-        if (multiline && candidate.startsWith(prefix)) {
-            candidate += value;
-            if (candidate.endsWith("\r\n\r\n") || candidate.endsWith("\n\n")) {
-                response = candidate;
-                return true;
-            }
-            size_t end = candidate.length();
-            while (end && (candidate[end - 1] == '\r' || candidate[end - 1] == '\n' || candidate[end - 1] == ' ')) --end;
-            if (end >= 9 && candidate[end - 9] == '*') {
-                candidate.remove(end);
-                response = candidate;
-                return true;
-            }
-            return false;
-        }
-        if (candidate.startsWith(prefix)) {
-            response = candidate;
-            return true;
-        }
-        candidate = "";
-    } else if (!candidate.isEmpty() && candidate.length() < (multiline ? 4095U : 383U)) {
+        return false;
+    }
+    if (value == '\r' || value == '\n') {
+        return finishUnicoreCandidate(value, prefix, multiline, candidate, response);
+    }
+    if (candidate.isEmpty()) return false;
+
+    
+    if (const auto limit = multiline ? 4095U : 383U;
+        candidate.length() < limit)
+    {
         candidate += value;
-    } else if (candidate.length() >= (multiline ? 4095U : 383U)) {
+    } else {
         candidate = "";
     }
     return false;
+}
+
+void processUnicoreResponseByte(char value, const char *prefix, bool multiline,
+                                UnicoreReply &reply, String &candidate,
+                                String &response, String &error) {
+    bufferGnssQueryByte(static_cast<uint8_t>(value));
+    if (reply.feed(static_cast<uint8_t>(value))) {
+        Serial.printf("[GNSS][READBACK][ACK] %s\n", reply.line);
+        if (reply.state == UnicoreReply::State::Error) {
+            error = String("Unicore rejected query: ") + reply.line;
+            return;
+        }
+    }
+    appendUnicoreCandidate(value, prefix, multiline, candidate, response);
 }
 
 bool queryUnicoreLine(const char *query, const char *prefix, String &response, String &error,
@@ -79,18 +121,10 @@ bool queryUnicoreLine(const char *query, const char *prefix, String &response, S
     uint32_t receivedBytes = 0;
     const uint32_t started = millis();
     while (written && millis() - started < 3000UL && response.isEmpty() && error.isEmpty()) {
-        while (Serial1.available() > 0) {
-            const char value = static_cast<char>(Serial1.read());
-            bufferGnssQueryByte(static_cast<uint8_t>(value));
+        while (Serial1.available() > 0 && response.isEmpty() && error.isEmpty()) {
+            const auto value = static_cast<char>(Serial1.read());
             ++receivedBytes;
-            if (reply.feed(static_cast<uint8_t>(value))) {
-                Serial.printf("[GNSS][READBACK][ACK] %s\n", reply.line);
-                if (reply.state == UnicoreReply::State::Error) {
-                    error = String("Unicore rejected query: ") + reply.line;
-                    break;
-                }
-            }
-            if (appendUnicoreCandidate(value, prefix, multiline, candidate, response)) break;
+            processUnicoreResponseByte(value, prefix, multiline, reply, candidate, response, error);
         }
         if (response.isEmpty()) vTaskDelay(pdMS_TO_TICKS(5));
     }
@@ -99,7 +133,7 @@ bool queryUnicoreLine(const char *query, const char *prefix, String &response, S
 
     Serial.printf("[GNSS][READBACK][RX] query=%s; bytes=%lu; elapsed_ms=%lu; reply=%u\n",
                   query, static_cast<unsigned long>(receivedBytes),
-                  static_cast<unsigned long>(millis() - started), static_cast<unsigned int>(reply.state));
+                  millis() - started, static_cast<unsigned int>(reply.state));
 
     if (!error.isEmpty()) return false;
     if (!written) {
@@ -110,6 +144,80 @@ bool queryUnicoreLine(const char *query, const char *prefix, String &response, S
         error = String("Unicore ") + query + " readback timeout";
         return false;
     }
+    return true;
+}
+
+bool splitBestPositionPayload(const String &payload, std::array<String, 10> &fields, String &error) {
+    auto start = 0;
+    for (size_t index = 0; index < 10; ++index) {
+        const auto comma = payload.indexOf(',', start);
+        if (index < 6 && comma < 0) {
+            error = "Unicore BESTNAV response is incomplete";
+            return false;
+        }
+        const auto end = comma < 0 ? payload.length() : comma;
+        fields[index] = payload.substring(start, end);
+        start = end + 1;
+        if (comma < 0) break;
+    }
+    for (String &field : fields) field.trim();
+    return true;
+}
+
+bool parseBestCoordinate(const String &value, const char *name, double &result, String &error) {
+    char *end = nullptr;
+    result = std::strtod(value.c_str(), &end);
+    if (end != value.c_str() && *end == '\0') return true;
+    error = String("Unicore BESTNAV ") + name + " is invalid";
+    return false;
+}
+
+bool parseBestPositionCoordinates(const std::array<String, 10> &fields, JsonObject position, String &error) {
+    if (!fields[0].equalsIgnoreCase("SOL_COMPUTED")
+        || fields[2].isEmpty() || fields[3].isEmpty() || fields[4].isEmpty()) {
+        error = String("Unicore BESTNAV has no computed position: ") + fields[0];
+        return false;
+    }
+
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double height = 0.0;
+    if (!parseBestCoordinate(fields[2], "latitude", latitude, error)
+        || !parseBestCoordinate(fields[3], "longitude", longitude, error)
+        || !parseBestCoordinate(fields[4], "height", height, error)) {
+        return false;
+    }
+    if (!std::isfinite(latitude) || !std::isfinite(longitude) || !std::isfinite(height)
+        || latitude < -90.0 || latitude > 90.0
+        || longitude < -180.0 || longitude > 180.0) {
+        error = "Unicore BESTNAV coordinates are invalid";
+        return false;
+    }
+    position["state"] = "ok";
+    position["latitude"] = latitude;
+    position["longitude"] = longitude;
+    position["height_msl"] = height;
+    return true;
+}
+
+bool parseBestUncertainty(const std::array<String, 10> &fields, JsonObject position, String &error) {
+    char *end = nullptr;
+    const double undulation = std::strtod(fields[5].c_str(), &end);
+    if (end == fields[5].c_str() || *end != '\0'
+        || !std::isfinite(undulation) || fields[6] != "WGS84") {
+        error = "Unicore BESTNAV undulation/datum is invalid";
+        return false;
+    }
+    position["undulation"] = undulation;
+    if (fields[7].isEmpty() || fields[8].isEmpty()) return true;
+
+    const double latSigma = std::strtod(fields[7].c_str(), &end);
+    const bool latValid = end != fields[7].c_str() && *end == '\0'
+        && std::isfinite(latSigma) && latSigma >= 0 && latSigma <= 10000000;
+    const double lonSigma = std::strtod(fields[8].c_str(), &end);
+    const bool lonValid = end != fields[8].c_str() && *end == '\0'
+        && std::isfinite(lonSigma) && lonSigma >= 0 && lonSigma <= 10000000;
+    if (latValid && lonValid) position["horizontal_sigma_m"] = std::hypot(latSigma, lonSigma);
     return true;
 }
 
@@ -142,8 +250,9 @@ bool readMode(String &mode, String &error) {
         return false;
     }
     mode = response.substring(separator + 1);
-    const int checksum = mode.indexOf('*');
-    if (checksum >= 0) mode.remove(checksum);
+    if (const int checksum = mode.indexOf('*'); checksum >= 0)
+        mode.remove(checksum);
+
     mode.trim();
     if (mode.endsWith(",")) mode.remove(mode.length() - 1);
     mode.toUpperCase();
@@ -170,69 +279,14 @@ bool readBestPosition(JsonObject position, String &error) {
         return false;
     }
     String payload = response.substring(separator + 1);
-    const int checksum = payload.indexOf('*');
-    if (checksum >= 0) payload.remove(checksum);
-    String fields[10];
-    int start = 0;
-    for (size_t index = 0; index < 10; ++index) {
-        const int comma = payload.indexOf(',', start);
-        if (index < 6 && comma < 0) {
-            error = "Unicore BESTNAV response is incomplete";
-            return false;
-        }
-        const int end = comma < 0 ? payload.length() : comma;
-        fields[index] = payload.substring(start, end);
-        start = end + 1;
-        if (comma < 0) break;
-    }
-    for (String &field : fields) field.trim();
+    if (const int checksum = payload.indexOf('*'); checksum >= 0)
+        payload.remove(checksum);
+    std::array<String, 10> fields;
+    if (!splitBestPositionPayload(payload, fields, error)) return false;
     position["solution_status"] = fields[0];
     position["position_type"] = fields[1];
-    if (!fields[0].equalsIgnoreCase("SOL_COMPUTED") || fields[2].isEmpty()
-        || fields[3].isEmpty() || fields[4].isEmpty()) {
-        error = String("Unicore BESTNAV has no computed position: ") + fields[0];
-        return false;
-    }
-    char *end = nullptr;
-    const double latitude = std::strtod(fields[2].c_str(), &end);
-    if (end == fields[2].c_str() || *end != '\0') {
-        error = "Unicore BESTNAV latitude is invalid";
-        return false;
-    }
-    const double longitude = std::strtod(fields[3].c_str(), &end);
-    if (end == fields[3].c_str() || *end != '\0') {
-        error = "Unicore BESTNAV longitude is invalid";
-        return false;
-    }
-    const double height = std::strtod(fields[4].c_str(), &end);
-    if (end == fields[4].c_str() || *end != '\0') {
-        error = "Unicore BESTNAV height is invalid";
-        return false;
-    }
-    if (!std::isfinite(latitude) || !std::isfinite(longitude) || !std::isfinite(height)
-        || latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
-        error = "Unicore BESTNAV coordinates are invalid";
-        return false;
-    }
-    position["state"] = "ok";
-    position["latitude"] = latitude;
-    position["longitude"] = longitude;
-    position["height_msl"] = height;
-    const double undulation = std::strtod(fields[5].c_str(), &end);
-    if (end == fields[5].c_str() || *end != '\0' || !std::isfinite(undulation) || fields[6] != "WGS84") {
-        error = "Unicore BESTNAV undulation/datum is invalid";
-        return false;
-    }
-    position["undulation"] = undulation;
-    if (!fields[7].isEmpty() && !fields[8].isEmpty()) {
-        const double latSigma = std::strtod(fields[7].c_str(), &end);
-        const bool latValid = end != fields[7].c_str() && *end == '\0' && std::isfinite(latSigma) && latSigma >= 0 && latSigma <= 10000000;
-        const double lonSigma = std::strtod(fields[8].c_str(), &end);
-        if (latValid && end != fields[8].c_str() && *end == '\0' && std::isfinite(lonSigma) && lonSigma >= 0 && lonSigma <= 10000000) {
-            position["horizontal_sigma_m"] = std::hypot(latSigma, lonSigma);
-        }
-    }
-    return true;
+    return parseBestPositionCoordinates(fields, position, error)
+        && parseBestUncertainty(fields, position, error);
 }
 
 const char *modeKind(const String &mode) {

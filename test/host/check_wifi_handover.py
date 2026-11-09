@@ -6,7 +6,7 @@ from host_coverage import compile_cpp, run_cpp, cpp_output, mapped
 
 root = Path(__file__).resolve().parents[2]
 source = (root / 'src/hardware/Network_Manager.cpp').read_text()
-start = source.index('static bool tryWifiFallback(bool protocolsRunning) {')
+start = source.index('bool tryWifiFallback(bool protocolsRunning) {')
 end = source.index('// Both switching directions', start)
 function = source[start:end]
 harness = r'''

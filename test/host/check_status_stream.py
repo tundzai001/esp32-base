@@ -24,6 +24,7 @@ shim = shim.replace('    void trim() {', '''    String(const char *text) : std::
 snapshot = (root / 'include/functions/ntrip/RTCM_Receiver.h').read_text().split('struct GnssTelemetrySnapshot {', 1)[1].split('\n};', 1)[0]
 common = r'''
 #include <cassert>
+#include <array>
 #include <cstdlib>
 #include <cmath>
 #include <iostream>

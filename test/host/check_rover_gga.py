@@ -9,15 +9,21 @@ source = (root / "src/functions/ntrip/ntrip_rover.cpp").read_text()
 sender = source.split("void sendRoverGgaIfAvailable(", 1)[1].split("} // namespace", 1)[0]
 harness = r'''
 #include <cassert>
+#include <array>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 using String = std::string;
 uint32_t now = 10000, roverLastGgaMs = 0;
 uint32_t millis() { return now; }
-struct Snapshot { const char *lastGga = ""; uint32_t lastGgaMs = 0; } snapshot;
+struct Snapshot { std::array<char,128> lastGga{}; uint32_t lastGgaMs = 0; } snapshot;
 using GnssTelemetrySnapshot = Snapshot;
 Snapshot getGnssTelemetrySnapshot() { return snapshot; }
+void setGga(const char *text) {
+    snapshot.lastGga.fill('\0');
+    std::memcpy(snapshot.lastGga.data(), text, std::strlen(text));
+}
 struct {
     std::vector<std::string> logs;
     void println(const char *line) { logs.emplace_back(line); }
@@ -42,7 +48,9 @@ int main() {
     sendRoverGgaIfAvailable(client);
     assert(Serial.logs.size() == 1); // Do not flood missing-GGA logs.
     now += 5000;
-    snapshot = {"$GNGGA,test", now - 3001};
+    snapshot = {};
+    setGga("$GNGGA,test");
+    snapshot.lastGgaMs = now - 3001;
     sendRoverGgaIfAvailable(client);
     assert(client.writes == 0); // Never send stale receiver data.
     now += 5000;

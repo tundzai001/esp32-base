@@ -1,0 +1,43 @@
+# Doxygen configuration for the ESP32 GNSS gateway.
+
+PROJECT_NAME           = "ESP32 GNSS Gateway"
+PROJECT_BRIEF          = "GNSS, NTRIP, MQTT, and hardware integration firmware"
+OUTPUT_DIRECTORY       = docs/doxy/api
+CREATE_SUBDIRS         = NO
+
+INPUT                  = include src
+FILE_PATTERNS          = *.h *.cpp
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */backend/*
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = .
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DOT_IMAGE_FORMAT       = svg
+DOT_GRAPH_MAX_NODES    = 100
+EXCLUDE_SYMBOLS        = std::* __gnu_cxx::*
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+QUIET                  = YES
+WARNINGS               = YES
+WARN_LOGFILE           = docs/doxy/api/doxygen-warnings.log

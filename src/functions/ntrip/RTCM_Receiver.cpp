@@ -14,7 +14,7 @@ constexpr size_t MAX_RTCM_FRAME_LENGTH = 1029; // 3-byte header + 1023 + CRC
 
 String nmeaBuffer;
 String pendingRtcmData;
-uint8_t rtcmFrame[MAX_RTCM_FRAME_LENGTH] = {};
+std::array<uint8_t, MAX_RTCM_FRAME_LENGTH> rtcmFrame = {};
 size_t rtcmLength = 0;
 size_t rtcmExpectedLength = 0;
 uint8_t ubxHeader[6] = {};
@@ -65,9 +65,8 @@ double nmeaCoordinate(const char *raw, const char *hemisphere) {
     return coordinate;
 }
 
-void setFixStatus(char *target, size_t capacity, int quality) {
-    if (!target || capacity == 0) return;
-
+template <size_t Capacity>
+void setFixStatus(std::array<char, Capacity> &target, int quality) {
     const char *status = "UNKNOWN";
     switch (quality) {
         case 0: status = "NO_FIX"; break;
@@ -78,8 +77,8 @@ void setFixStatus(char *target, size_t capacity, int quality) {
         case 7: status = "BASE_FIXED"; break;
         default: status = "NO_FIX"; break;
     }
-    snprintf(target, capacity, "%s", status);
-    target[capacity - 1] = '\0';
+    snprintf(target.data(), target.size(), "%s", status);
+    target.back() = '\0';
 }
 
 void parseGgaFields(char *const *fields, size_t fieldCount, bool &updateFix, int &fixQuality, bool &updatePosition, double &latitude, double &longitude, double &altitude, float &hdop, uint8_t &satellites) {
@@ -118,8 +117,8 @@ void parseGstFields(char *const *fields, size_t fieldCount, bool &updateGst, flo
     if (fieldCount > 7) {
         gstSemiMajor = static_cast<float>(atof(fields[3]));
         gstSemiMinor = static_cast<float>(atof(fields[4]));
-        const float latitudeSigma = static_cast<float>(atof(fields[6]));
-        const float longitudeSigma = static_cast<float>(atof(fields[7]));
+        const auto latitudeSigma = static_cast<float>(atof(fields[6]));
+        const auto longitudeSigma = static_cast<float>(atof(fields[7]));
         gstHacc = sqrtf(latitudeSigma * latitudeSigma + longitudeSigma * longitudeSigma);
         updateGst = gstHacc > 0.0F;
     }
@@ -192,10 +191,10 @@ void parseNmeaSentence(const String &rawSentence) {
     else if (strcmp(type, "GSV") == 0) ++telemetry.gsvCount;
     else if (strcmp(type, "GST") == 0) ++telemetry.gstCount;
 
-    if (updateFix) setFixStatus(telemetry.fixStatus, sizeof(telemetry.fixStatus), fixQuality);
+    if (updateFix) setFixStatus(telemetry.fixStatus, fixQuality);
     if (strcmp(type, "GGA") == 0) {
-        snprintf(telemetry.lastGga, sizeof(telemetry.lastGga), "%s", sentence.c_str());
-        telemetry.lastGga[sizeof(telemetry.lastGga) - 1] = '\0';
+        snprintf(telemetry.lastGga.data(), telemetry.lastGga.size(), "%s", sentence.c_str());
+        telemetry.lastGga.back() = '\0';
         telemetry.lastGgaMs = millis();
         if (!updatePosition) telemetry.latitude = telemetry.longitude = telemetry.altitude = NAN;
     }
@@ -249,7 +248,7 @@ bool processRtcmByte(uint8_t value, String &rtcmOutput)
         resetRtcmParser();
         return false;
     }
-    if (rtcmLength >= sizeof(rtcmFrame))
+    if (rtcmLength >= rtcmFrame.size())
     {
         resetRtcmParser();
         return true;
@@ -261,7 +260,7 @@ bool processRtcmByte(uint8_t value, String &rtcmOutput)
         const uint16_t payloadLength =
             (static_cast<uint16_t>(rtcmFrame[1]) & 0x03U) * 256U + rtcmFrame[2];
         rtcmExpectedLength = static_cast<size_t>(payloadLength) + 6U;
-        if (rtcmExpectedLength > sizeof(rtcmFrame))
+        if (rtcmExpectedLength > rtcmFrame.size())
         {
             resetRtcmParser();
             return true;
@@ -271,8 +270,8 @@ bool processRtcmByte(uint8_t value, String &rtcmOutput)
         return true;
 
     // Forward the complete RTCM frame without validating its CRC or decoding its type.
-    rtcmOutput.concat(reinterpret_cast<const char *>(rtcmFrame), rtcmLength);
-    backendAgent.enqueueRtcm(rtcmFrame, rtcmLength);
+    rtcmOutput.concat(reinterpret_cast<const char *>(rtcmFrame.data()), rtcmLength);
+    backendAgent.enqueueRtcm(rtcmFrame.data(), rtcmLength);
     noteRtcmBytes(rtcmLength);
     portENTER_CRITICAL(&telemetryMux);
     ++telemetry.rtcmFrames;
@@ -367,7 +366,7 @@ String receiveRtcmFromGnss() {
     }
 
     while (Serial1.available() > 0) {
-        const size_t bytesAvailable = static_cast<size_t>(Serial1.available());
+        const auto bytesAvailable = static_cast<size_t>(Serial1.available());
         const size_t bytesToRead = min(bytesAvailable, sizeof(buffer));
         if (bytesToRead == 0) break;
 
@@ -410,7 +409,7 @@ GnssTelemetrySnapshot getGnssTelemetrySnapshot() {
     copy = telemetry;
     portEXIT_CRITICAL(&telemetryMux);
     if (copy.lastGgaMs == 0 || millis() - copy.lastGgaMs > 15000UL) {
-        setFixStatus(copy.fixStatus, sizeof(copy.fixStatus), 0);
+        setFixStatus(copy.fixStatus, 0);
     }
     return copy;
 }

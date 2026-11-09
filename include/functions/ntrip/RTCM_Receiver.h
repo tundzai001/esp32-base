@@ -4,12 +4,13 @@
 #include "Top_Lvl_Config.h"
 #include "Prog_Config.h"
 #include "WString.h"
+#include <array>
 #include <cstdint>
 
 inline constexpr size_t RTCM_SUPPORTED_MESSAGE_TYPE_COUNT = 10;
 
 struct RtcmMessageCounts {
-	uint32_t values[RTCM_SUPPORTED_MESSAGE_TYPE_COUNT] = {};
+	std::array<uint32_t, RTCM_SUPPORTED_MESSAGE_TYPE_COUNT> values = {};
 };
 
 // Snapshot of NMEA-derived position/quality and UART/frame counters.
@@ -39,8 +40,8 @@ struct GnssTelemetrySnapshot {
     float gstSemiMinor = 0.0F;
     float gstHacc = 0.0F;
     uint8_t satellites = 0;
-    char fixStatus[16] = "NO_FIX";
-    char lastGga[128] = {};
+    std::array<char, 16> fixStatus = {"NO_FIX"};
+    std::array<char, 128> lastGga = {};
 };
 
 String receiveRtcmFromGnss();

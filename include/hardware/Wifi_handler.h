@@ -4,9 +4,10 @@
 // ============= GẮN THƯ VIỆN CẦN THIẾT =============
 #include <WiFi.h>
 #include "Top_Lvl_Config.h"
+#include <functional>
 
 // ================= HÀM CẤU HÌNH WI-FI =================
 
-bool setupWiFi(bool (*validateConnection)() = nullptr);
+bool setupWiFi(const std::function<bool()> &validateConnection = {});
 
 #endif

@@ -138,7 +138,7 @@ void BackendAgent::loadPreferences() {
     surveyInResult_ = statePrefs.isKey("SURVEY_RESULT") ? statePrefs.getString("SURVEY_RESULT") : "{}";
     statePrefs.end();
     prefs.begin("myPrefs", true);
-    const uint32_t bootCounter = static_cast<uint32_t>(prefs.getInt("RSTRT_COUNT", 0));
+    const auto bootCounter = static_cast<uint32_t>(prefs.getInt("RSTRT_COUNT", 0));
     prefs.end();
     if (serialNeedsSave) {
         const bool opened = beginBackendPreferences(false);

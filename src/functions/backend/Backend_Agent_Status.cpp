@@ -55,9 +55,9 @@ void BackendAgent::appendStatusFields(JsonDocument &doc, const String &status,
     doc["agent_timestamp"] = timestamp.toInt();
     doc["status_boot_id"] = statusBootId_;
     doc["status_sequence"] = statusSequence_;
-    doc["rtk_fix_status"] = gnss.fixStatus;
-    doc["last_raw_gga"] = gnss.lastGga;
-    doc["last_gga_fix_status"] = gnss.fixStatus;
+    doc["rtk_fix_status"] = gnss.fixStatus.data();
+    doc["last_raw_gga"] = gnss.lastGga.data();
+    doc["last_gga_fix_status"] = gnss.fixStatus.data();
     if (gnss.lastGgaMs != 0) doc["last_raw_gga_age"] = (nowMs - gnss.lastGgaMs) / 1000.0;
     else doc["last_raw_gga_age"] = nullptr;
     doc["base_mode_active"] = baseConfig_ != "{}" && baseConfig_.length() > 2;
@@ -85,8 +85,8 @@ void BackendAgent::appendAutoBaseProgress(JsonDocument &doc,
             progress["phase"] = "unverified";
             progress["reason"] = "Ket qua cu chua duoc xac nhan RTK Fixed; can chay lai Auto Base";
         }
-        progress["last_raw_gga"] = gnss.lastGga;
-        progress["gga_fix_status"] = gnss.fixStatus;
+        progress["last_raw_gga"] = gnss.lastGga.data();
+        progress["gga_fix_status"] = gnss.fixStatus.data();
         progress["gga_age_seconds"] = doc["last_raw_gga_age"];
         progress["rtcm_bytes"] = ntripRoverBytesReceived();
         progress["rtcm_pkts"] = ntripRoverPacketsReceived();
@@ -252,7 +252,7 @@ void BackendAgent::appendGnssStatus(JsonDocument &doc, const GnssTelemetrySnapsh
     position["longitude"] = gnss.longitude;
     position["altitude"] = gnss.altitude;
 
-    doc["rtk_fix_status"] = gnss.fixStatus;
+    doc["rtk_fix_status"] = gnss.fixStatus.data();
     if (gnss.satellites > 0) doc["satellite_count"] = gnss.satellites;
     doc["hacc"] = nullptr; // Compatibility field: always millimetres, never HDOP.
     doc["gnss_quality"] = nullptr;

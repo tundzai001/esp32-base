@@ -598,7 +598,7 @@ bool BackendAgent::applyRoverMode() {
     while (millis() - waiting < 10000UL && !workflowCancelRequested_) {
         const auto snapshot = getGnssTelemetrySnapshot();
         if (snapshot.lastGgaMs != 0 && static_cast<int32_t>(snapshot.lastGgaMs - waiting) > 0) {
-            Serial.printf("[AUTO BASE] Rover da xac nhan, GGA UART: %s\n", snapshot.lastGga);
+            Serial.printf("[AUTO BASE] Rover da xac nhan, GGA UART: %s\n", snapshot.lastGga.data());
             return true;
         }
         vTaskDelay(pdMS_TO_TICKS(100));

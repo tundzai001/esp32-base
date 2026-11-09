@@ -182,7 +182,7 @@ bool BackendAgent::detectGnssChip(Stream &stream, bool force) {
     bool foundUblox = false;
     while (millis() - startMs < 400) {
         while (stream.available()) {
-            uint8_t b = static_cast<uint8_t>(stream.read());
+            auto b = static_cast<uint8_t>(stream.read());
             if (ubxMatch == 0 && b == 0xB5) ubxMatch = 1;
             else if (ubxMatch == 1 && b == 0x62) ubxMatch = 2;
             else if (ubxMatch == 2 && b == 0x0A) ubxMatch = 3;
@@ -212,7 +212,7 @@ bool BackendAgent::detectGnssChip(Stream &stream, bool force) {
     String passiveStr = "";
     while (millis() - startMs < 300) {
         while (stream.available()) {
-            uint8_t b = static_cast<uint8_t>(stream.read());
+            auto b = static_cast<uint8_t>(stream.read());
             if (b >= 32 && b <= 126) passiveStr += static_cast<char>(b);
             if (passiveStr.length() >= 512) break;
         }

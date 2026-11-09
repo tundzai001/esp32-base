@@ -9,6 +9,7 @@ source = (root / "src/functions/ntrip/RTCM_Receiver.cpp").read_text()
 parser = source.split("void resetRtcmParser()", 1)[1].split("\n} // namespace", 1)[0]
 harness = r'''
 #include <cassert>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -19,7 +20,8 @@ struct String : std::string {
 };
 constexpr size_t MAX_NMEA_LENGTH = 512;
 String nmeaBuffer;
-uint8_t rtcmFrame[1029] = {}, ubxHeader[6] = {};
+std::array<uint8_t,1029> rtcmFrame = {};
+uint8_t ubxHeader[6] = {};
 size_t rtcmLength = 0, rtcmExpectedLength = 0, ubxHeaderLength = 0, ubxBytesRemaining = 0;
 unsigned sentences = 0;
 void parseNmeaSentence(const String &line) {
